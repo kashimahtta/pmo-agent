@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PMO Resource Agent</title>
+<style>
+  :root { --bg:#0f172a; --panel:#1e293b; --muted:#94a3b8; --text:#e2e8f0; --accent:#6366f1; --bad:#ef4444; --ok:#22c55e; --warn:#f59e0b; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:var(--bg); color:var(--text); }
+  header { display:flex; align-items:center; justify-content:space-between; gap:.5rem; padding:.75rem 1rem; border-bottom:1px solid #334155; position:sticky; top:0; background:var(--bg); z-index:5; }
+  header h1 { font-size:1.1rem; margin:0; }
+  header .who { color:var(--muted); font-size:.85rem; display:flex; gap:.5rem; align-items:center; }
+  nav { display:flex; gap:.25rem; padding:.5rem 1rem 0; overflow-x:auto; white-space:nowrap; border-bottom:1px solid #334155; }
+  nav button { background:none; border:none; color:var(--muted); padding:.6rem .9rem; cursor:pointer; border-bottom:2px solid transparent; font-size:.95rem; }
+  nav button.active { color:var(--text); border-color:var(--accent); }
+  main { max-width:1100px; margin:0 auto; padding:1rem; }
+  section { display:none; } section.active { display:block; }
+  button.btn { background:var(--accent); color:#fff; border:0; border-radius:8px; padding:.55rem .9rem; cursor:pointer; font-size:.9rem; }
+  button.ghost { background:var(--panel); color:var(--text); border:1px solid #334155; border-radius:999px; padding:.4rem .8rem; cursor:pointer; font-size:.85rem; }
+  button.ghost:hover, button.btn:hover { filter:brightness(1.15); }
+  #log { display:flex; flex-direction:column; gap:.75rem; min-height:45vh; max-height:60vh; overflow-y:auto; padding-bottom:.5rem; }
+  .msg { max-width:92%; padding:.7rem .9rem; border-radius:14px; line-height:1.45; overflow-x:auto; }
+  .msg.user { align-self:flex-end; background:var(--accent); }
+  .msg.bot { align-self:flex-start; background:var(--panel); }
+  .msg p { margin:.3rem 0; } .msg h3 { margin:.2rem 0 .4rem; }
+  .msg code { background:#0f172a; padding:.1rem .3rem; border-radius:4px; }
+  table { border-collapse:collapse; width:100%; font-size:.9rem; margin:.4rem 0; }
+  th, td { border-bottom:1px solid #334155; padding:.4rem .6rem; text-align:left; }
+  th { color:var(--muted); font-weight:600; }
+  .scroll { overflow-x:auto; }
+  .chips { display:flex; flex-wrap:wrap; gap:.4rem; margin:.75rem 0; }
+  form.send { display:flex; gap:.5rem; }
+  form.send input { flex:1; padding:.7rem .9rem; border-radius:10px; border:1px solid #334155; background:var(--panel); color:var(--text); font-size:1rem; min-width:0; }
+  .metrics { display:grid; grid-template-columns:repeat(4,1fr); gap:.75rem; margin-bottom:1rem; }
+  .card { background:var(--panel); border-radius:12px; padding:.8rem 1rem; }
+  .card .n { font-size:1.6rem; font-weight:700; } .card .l { color:var(--muted); font-size:.8rem; }
+  .alert { background:#422006; border:1px solid var(--warn); border-radius:10px; padding:.5rem .8rem; margin:.4rem 0; font-size:.9rem; }
+  .bar { background:#334155; border-radius:6px; height:10px; overflow:hidden; min-width:90px; }
+  .bar > i { display:block; height:100%; background:var(--ok); }
+  .bar > i.hi { background:var(--warn); } .bar > i.over { background:var(--bad); }
+  .row { display:flex; gap:.5rem; flex-wrap:wrap; align-items:center; margin:.5rem 0; }
+  .muted { color:var(--muted); font-size:.85rem; }
+  .typing { color:var(--muted); font-style:italic; }
+  @media (max-width:640px) {
+    .metrics { grid-template-columns:repeat(2,1fr); }
+    main { padding:.6rem; } .msg { max-width:100%; }
+    #log { max-height:55vh; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>📊 PMO Resource Agent</h1>
+  <div class="who"><span id="who"></span><button class="ghost" id="signout" hidden>Sign out</button></div>
+</header>
+
+<div id="login" style="max-width:420px;margin:15vh auto;padding:1rem;">
+  <h2>Welcome 👋</h2>
+  <p class="muted">Your data is stored in this browser (localStorage) and never leaves your device except to be processed by the agent.</p>
+  <form id="loginForm" class="send">
+    <input id="nameInput" placeholder="Your name" autocomplete="name" required maxlength="40">
+    <button class="btn">Enter</button>
+  </form>
+</div>
+
+<div id="app" hidden>
+  <nav id="tabs">
+    <button data-tab="chat" class="active">💬 Agent</button>
+    <button data-tab="dash">📈 Dashboard</button>
+    <button data-tab="res">👥 Resources</button>
+    <button data-tab="proj">📁 Projects</button>
+    <button data-tab="alloc">🔗 Allocations</button>
+  </nav>
+  <main>
+    <section id="chat" class="active">
+      <div id="log" aria-live="polite"></div>
+      <div class="chips" id="chips"></div>
+      <form class="send" id="sendForm">
+        <input id="msg" placeholder="Ask the agent… (try 'summary' or 'help')" autocomplete="off" maxlength="500">
+        <button class="btn" id="sendBtn">Send</button>
+      </form>
+      <div class="row"><button class="ghost" id="clearChat">🧹 Clear chat</button>
+        <button class="ghost" id="resetData">⚠️ Reset all data</button>
+        <button class="ghost" id="exportData">⬇️ Export</button></div>
+    </section>
+    <section id="dash"></section>
+    <section id="res"></section>
+    <section id="proj"></section>
+    <section id="alloc"></section>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+<script>
+const $ = (s) => document.querySelector(s);
+const KEY = "pmo-agent:";
+let user = localStorage.getItem(KEY + "user");
+let store = null;           // {data, chat, state, suggestions}
+let overview = null;
+const DEFAULT_CHIPS = ["Load sample data", "Summary", "Who is free?", "Help"];
+const HELP = `I'm your PMO resource assistant. Try:
+
+- \`load sample data\`
+- \`add resource Alice role Developer skills python, sql capacity 40 rate 80\`
+- \`add project Apollo budget 50000\`
+- \`assign Alice to Apollo 20 hours\`
+- \`who is free?\` · \`who is overallocated?\` · \`who knows python?\`
+- \`summary\` · \`utilization\` · \`cost of Apollo\` · \`rebalance\``;
+
+const md = (t) => DOMPurify.sanitize(marked.parse(t));
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+function load() {
+  const raw = localStorage.getItem(KEY + "store:" + user);
+  store = raw ? JSON.parse(raw) : { data: {resources:[],projects:[],allocations:[]}, chat: [], state: {}, suggestions: DEFAULT_CHIPS };
+}
+function save() { localStorage.setItem(KEY + "store:" + user, JSON.stringify(store)); }
+
+function showApp() {
+  $("#login").hidden = true; $("#app").hidden = false; $("#signout").hidden = false;
+  $("#who").textContent = "👤 " + user;
+  load(); renderChat(); renderChips(); refreshOverview();
+}
+
+$("#loginForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const n = $("#nameInput").value.trim();
+  if (!n) return;
+  user = n; localStorage.setItem(KEY + "user", user); showApp();
+});
+$("#signout").addEventListener("click", () => {
+  localStorage.removeItem(KEY + "user"); location.reload();
+});
+
+$("#tabs").addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  document.querySelectorAll("nav button, section").forEach((x) => x.classList.remove("active"));
+  b.classList.add("active"); $("#" + b.dataset.tab).classList.add("active");
+  if (b.dataset.tab !== "chat") refreshOverview();
+});
+
+function addBubble(role, text, animate) {
+  const d = document.createElement("div");
+  d.className = "msg " + (role === "user" ? "user" : "bot");
+  $("#log").appendChild(d);
+  if (role === "user") d.textContent = text;
+  else if (animate) {
+    const words = text.split(" "); let i = 0;
+    const tick = () => { i = Math.min(words.length, i + 4); d.innerHTML = md(words.slice(0, i).join(" "));
+      $("#log").scrollTop = $("#log").scrollHeight; if (i < words.length) setTimeout(tick, 15); };
+    tick();
+  } else d.innerHTML = md(text);
+  $("#log").scrollTop = $("#log").scrollHeight;
+  return d;
+}
+function renderChat() {
+  $("#log").innerHTML = "";
+  if (!store.chat.length) addBubble("bot", HELP);
+  store.chat.forEach((m) => addBubble(m.role, m.content));
+}
+function renderChips() {
+  $("#chips").innerHTML = "";
+  [...new Set(store.suggestions)].slice(0, 5).forEach((s) => {
+    const b = document.createElement("button"); b.className = "ghost"; b.textContent = s;
+    b.onclick = () => send(s); $("#chips").appendChild(b);
+  });
+}
+
+let busy = false;
+async function send(text) {
+  text = text.trim(); if (!text || busy) return;
+  busy = true; $("#sendBtn").disabled = true;
+  addBubble("user", text);
+  const typing = addBubble("bot", "Thinking…"); typing.classList.add("typing");
+  try {
+    const r = await fetch("/api/chat", { method: "POST", headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ message: text, data: store.data, state: store.state }) });
+    if (!r.ok) throw new Error("Server error " + r.status);
+    const j = await r.json();
+    typing.remove();
+    addBubble("bot", j.reply, true);
+    store.data = j.data; store.state = j.state || {}; overview = j.overview;
+    store.suggestions = j.suggestions?.length ? j.suggestions : DEFAULT_CHIPS;
+    store.chat.push({role:"user", content:text}, {role:"assistant", content:j.reply});
+    store.chat = store.chat.slice(-100);
+    save(); renderChips(); renderTabs();
+  } catch (err) {
+    typing.remove(); addBubble("bot", "❌ Couldn't reach the agent: " + err.message + ". Your data is safe; try again.");
+  } finally { busy = false; $("#sendBtn").disabled = false; $("#msg").focus(); }
+}
+$("#sendForm").addEventListener("submit", (e) => { e.preventDefault(); const v = $("#msg").value; $("#msg").value = ""; send(v); });
+$("#clearChat").onclick = () => { store.chat = []; store.state = {}; save(); renderChat(); };
+$("#resetData").onclick = () => { if (confirm("Delete all resources, projects and allocations?")) {
+  store.data = {resources:[],projects:[],allocations:[]}; store.suggestions = DEFAULT_CHIPS; save(); renderChips(); refreshOverview(); } };
+$("#exportData").onclick = () => {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(store.data, null, 2)], {type:"application/json"}));
+  a.download = "pmo-data.json"; a.click();
+};
+
+async function refreshOverview() {
+  try {
+    const r = await fetch("/api/overview", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ data: store.data }) });
+    overview = (await r.json()).overview; renderTabs();
+  } catch { /* offline: keep stale view */ }
+}
+
+const table = (cols, rows, labels) => rows.length
+  ? `<div class="scroll"><table><tr>${labels.map((l)=>`<th>${l}</th>`).join("")}</tr>${rows.map((r)=>`<tr>${cols.map((c)=>`<td>${typeof c==="function"?c(r):esc(r[c])}</td>`).join("")}</tr>`).join("")}</table></div>`
+  : `<p class="muted">Nothing here yet. Ask the agent to <code>load sample data</code>.</p>`;
+const bar = (a, c) => { const p = c ? a / c * 100 : 0; return `<div class="bar"><i class="${p>100?"over":p>=85?"hi":""}" style="width:${Math.min(p,100)}%"></i></div>`; };
+
+function renderTabs() {
+  if (!overview) return;
+  const u = overview.utilization, cap = u.reduce((s,x)=>s+x.capacity_hours,0), al = u.reduce((s,x)=>s+x.allocated,0);
+  $("#dash").innerHTML = `
+    <div class="metrics">
+      <div class="card"><div class="n">${u.length}</div><div class="l">Resources</div></div>
+      <div class="card"><div class="n">${overview.projects.length}</div><div class="l">Projects</div></div>
+      <div class="card"><div class="n">${cap ? Math.round(al/cap*100) : "—"}${cap?"%":""}</div><div class="l">Utilisation</div></div>
+      <div class="card"><div class="n">${u.filter((x)=>x.available<0).length}</div><div class="l">Overallocated</div></div>
+    </div>
+    ${overview.alerts.map((a)=>`<div class="alert">${esc(a)}</div>`).join("")}
+    ${table([ "name", "role", (r)=>`${r.allocated}/${r.capacity_hours}h`, (r)=>bar(r.allocated,r.capacity_hours) ], u, ["Name","Role","Hours","Load"])}`;
+  $("#res").innerHTML = table(["name","role","skills","capacity_hours","cost_rate"], store.data.resources, ["Name","Role","Skills","Capacity","Rate"]);
+  $("#proj").innerHTML = table(["name","status","start_date","end_date","budget"], overview.projects, ["Project","Status","Start","End","Budget"]);
+  $("#alloc").innerHTML = table(["resource","project","hours_per_week"], overview.allocations, ["Resource","Project","Hours/wk"]);
+}
+
+if (user) showApp();
+</script>
+</body>
+</html>

@@ -1,4 +1,5 @@
 import sqlite3
+import threading
 from pathlib import Path
 
 DB_PATH = Path(__file__).parent / "data" / "pmo.db"
@@ -23,13 +24,48 @@ CREATE TABLE IF NOT EXISTS chat(
 """
 
 
-def conn():
-    DB_PATH.parent.mkdir(exist_ok=True)
-    c = sqlite3.connect(DB_PATH)
+_local = threading.local()
+SNAPSHOT_TABLES = ("resources", "projects", "allocations")
+
+
+def _setup(c):
     c.row_factory = sqlite3.Row
     c.execute("PRAGMA foreign_keys=ON")
     c.executescript(SCHEMA)
     return c
+
+
+def conn():
+    mem = getattr(_local, "mem", None)
+    if mem is not None:
+        return mem
+    DB_PATH.parent.mkdir(exist_ok=True)
+    return _setup(sqlite3.connect(DB_PATH))
+
+
+def open_memory(snapshot=None):
+    """Use a throwaway in-memory DB (serverless mode), optionally preloaded from a snapshot."""
+    c = _setup(sqlite3.connect(":memory:", check_same_thread=False))
+    for table in SNAPSHOT_TABLES:
+        cols = [r[1] for r in c.execute(f"PRAGMA table_info({table})")]
+        for row in (snapshot or {}).get(table, []):
+            keep = {k: v for k, v in row.items() if k in cols}
+            if keep:
+                c.execute(f"INSERT INTO {table}({','.join(keep)}) VALUES({','.join('?' * len(keep))})",
+                          list(keep.values()))
+    c.commit()
+    _local.mem = c
+
+
+def snapshot():
+    return {t: query(f"SELECT * FROM {t} ORDER BY id") for t in SNAPSHOT_TABLES}
+
+
+def close_memory():
+    mem = getattr(_local, "mem", None)
+    if mem is not None:
+        mem.close()
+    _local.mem = None
 
 
 def query(sql, params=()):

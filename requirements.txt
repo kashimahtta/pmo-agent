@@ -1,2 +1,1 @@
-streamlit>=1.57
-pandas
+flask>=3.0
